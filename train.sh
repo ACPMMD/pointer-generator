@@ -1,0 +1,1 @@
+python run_summarization.py --mode=train --data_path=./chunked/train_* --vocab_path=./vocab --log_root=./a/log/directory --exp_name=myexperiment --debug=True
