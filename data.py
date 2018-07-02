@@ -21,6 +21,7 @@ import random
 import struct
 import csv
 from tensorflow.core.example import example_pb2
+import pdb
 
 # <s> and </s> are used in the data files to segment the abstracts into sentences. They don't receive vocab ids.
 SENTENCE_START = '<s>'
@@ -33,6 +34,13 @@ STOP_DECODING = '[STOP]' # This has a vocab id, which is used at the end of untr
 
 # Note: none of <s>, </s>, [PAD], [UNK], [START], [STOP] should appear in the vocab file.
 
+#cuipi  num=40
+SYNTAX_TAG = ['s','np','nn','nnp','nnps','nns','nac','vp','pp','prn',
+              'pos','prt','prp','prp$','dt','advp','adjp','to','cc','cd',
+              'in','sbar','sym','whnp','wp','wdt','vb','vbz','vbn','vbg',
+              'vbd','vbp','jj','jjr','md','ws','rb','rp','qp','x']
+
+SYNTAX_LIST = range(4,44) #cuipi
 
 class Vocab(object):
   """Vocabulary class for mapping between words and ids (integers)"""
@@ -45,10 +53,18 @@ class Vocab(object):
       max_size: integer. The maximum size of the resulting Vocabulary."""
     self._word_to_id = {}
     self._id_to_word = {}
+    #self._syn_to_id = {} #cuipi
+    #seld._id_to_syn = {} #cuipi
     self._count = 0 # keeps track of total number of words in the Vocab
 
     # [UNK], [PAD], [START] and [STOP] get the ids 0,1,2,3.
     for w in [UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
+      self._word_to_id[w] = self._count
+      self._id_to_word[self._count] = w
+      self._count += 1
+
+    #cuipi  SYNTAX_TAG get the ids 4 ~ 43
+    for w in SYNTAX_TAG:
       self._word_to_id[w] = self._count
       self._id_to_word[self._count] = w
       self._count += 1
@@ -61,16 +77,17 @@ class Vocab(object):
           print 'Warning: incorrectly formatted line in vocabulary file: %s\n' % line
           continue
         w = pieces[0]
-        if w in [SENTENCE_START, SENTENCE_END, UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
-          raise Exception('<s>, </s>, [UNK], [PAD], [START] and [STOP] shouldn\'t be in the vocab file, but %s is' % w)
-        if w in self._word_to_id:
-          raise Exception('Duplicated word in vocabulary file: %s' % w)
-        self._word_to_id[w] = self._count
-        self._id_to_word[self._count] = w
-        self._count += 1
-        if max_size != 0 and self._count >= max_size:
-          print "max_size of vocab was specified as %i; we now have %i words. Stopping reading." % (max_size, self._count)
-          break
+        if w not in SYNTAX_TAG:
+          if w in [SENTENCE_START, SENTENCE_END, UNKNOWN_TOKEN, PAD_TOKEN, START_DECODING, STOP_DECODING]:
+            raise Exception('<s>, </s>, [UNK], [PAD], [START] and [STOP] shouldn\'t be in the vocab file, but %s is' % w)
+          if w in self._word_to_id:
+            raise Exception('Duplicated word in vocabulary file: %s' % w)
+          self._word_to_id[w] = self._count
+          self._id_to_word[self._count] = w
+          self._count += 1
+          if max_size != 0 and self._count >= max_size:
+            print "max_size of vocab was specified as %i; we now have %i words. Stopping reading." % (max_size, self._count)
+            break
 
     print "Finished constructing vocabulary of %i total words. Last word added: %s" % (self._count, self._id_to_word[self._count-1])
 
@@ -80,11 +97,31 @@ class Vocab(object):
       return self._word_to_id[UNKNOWN_TOKEN]
     return self._word_to_id[word]
 
+  #cuipi
+  # def word2id(self, word):
+  #   """Returns the id (integer) of a word (string). Returns [UNK] id if word is OOV."""
+  #   if word not in self._word_to_id:
+  #     if word in self._syn_to_id:
+  #       return self._syn_to_id[word]
+  #     else:
+  #       return self._word_to_id[UNKNOWN_TOKEN]
+  #   return self._word_to_id[word]
+
   def id2word(self, word_id):
     """Returns the word (string) corresponding to an id (integer)."""
     if word_id not in self._id_to_word:
       raise ValueError('Id not found in vocab: %d' % word_id)
     return self._id_to_word[word_id]
+
+  #cuipi
+  # def id2word(self, word_id):
+  #   """Returns the word (string) corresponding to an id (integer)."""
+  #   if word_id not in self._id_to_word:
+  #     if word_id in self._id_to_syn:
+  #       word_id = 0
+  #     else:
+  #       raise ValueError('Id not found in vocab: %d' % word_id)
+  #   return self._id_to_word[word_id]
 
   def size(self):
     """Returns the total size of the vocabulary"""

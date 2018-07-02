@@ -49,6 +49,7 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
     p_gens: List of length input_size, containing tensors of shape [batch_size, 1]. The values of p_gen for each decoder step. Empty list if pointer_gen=False.
     coverage: Coverage vector on the last step computed. None if use_coverage=False.
   """
+  #pdb.set_trace()
   with variable_scope.variable_scope("attention_decoder") as scope:
     batch_size = encoder_states.get_shape()[0].value # if this line fails, it's because the batch size isn't defined
     attn_size = encoder_states.get_shape()[2].value # if this line fails, it's because the attention length isn't defined
@@ -65,7 +66,6 @@ def attention_decoder(decoder_inputs, initial_state, encoder_states, enc_padding
 
     # Get the weight matrix W_h and apply it to each encoder state to get (W_h h_i), the encoder features
     W_h = variable_scope.get_variable("W_h", [1, 1, attn_size, attention_vec_size])
-    pdb.set_trace()
     encoder_features = nn_ops.conv2d(encoder_states, W_h, [1, 1, 1, 1], "SAME") # shape (batch_size,attn_length,1,attention_vec_size)
 
     # Get the weight vectors v and w_c (w_c is for coverage)

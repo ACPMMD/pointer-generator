@@ -22,16 +22,23 @@ import numpy as np
 import tensorflow as tf
 from attention_decoder import attention_decoder
 from tensorflow.contrib.tensorboard.plugins import projector
+from tensorflow.python import debug as tf_debug
 import pdb
 
 FLAGS = tf.app.flags.FLAGS
+# SYNTAX_TAG = ['s','np','nn','nnp','nnps','nns','nac','vp','pp','prn','pos','prt',
+#               'prp','prp$','dt','advp','adjp','to','cc','cd','in','sbar',
+#               'sym','whnp','wp','wdt','vb','vbz','vbn','vbg','vbd','vbp','jj',
+#               'jjr','md','ws','rb','rp','qp','x']
 
 class SummarizationModel(object):
   """A class to represent a sequence-to-sequence model for text summarization. Supports both baseline mode, pointer-generator mode, and coverage"""
 
   def __init__(self, hps, vocab):
+  #def __init__(self, hps, vocab, syntax_tag=SYNTAX_TAG): #cuipi
     self._hps = hps
     self._vocab = vocab
+    #self._syntax_tag = syntax_tag
 
   def _add_placeholders(self):
     """Add placeholders to the graph. These are entry points for any input data."""
@@ -41,6 +48,7 @@ class SummarizationModel(object):
     self._enc_batch = tf.placeholder(tf.int32, [hps.batch_size, None], name='enc_batch')
     self._enc_lens = tf.placeholder(tf.int32, [hps.batch_size], name='enc_lens')
     self._enc_padding_mask = tf.placeholder(tf.float32, [hps.batch_size, None], name='enc_padding_mask')
+    #self._enc_batch_synLoc = tf.placeholder(tf.int32, [hps.batch_size, None], name='enc_batch_synLoc') #cuipi
     if FLAGS.pointer_gen:
       self._enc_batch_extend_vocab = tf.placeholder(tf.int32, [hps.batch_size, None], name='enc_batch_extend_vocab')
       self._max_art_oovs = tf.placeholder(tf.int32, [], name='max_art_oovs')
@@ -65,6 +73,7 @@ class SummarizationModel(object):
     feed_dict[self._enc_batch] = batch.enc_batch
     feed_dict[self._enc_lens] = batch.enc_lens
     feed_dict[self._enc_padding_mask] = batch.enc_padding_mask
+    #feed_dict[self._enc_batch_synLoc] = batch.enc_batch_synLoc #cuipi
     if FLAGS.pointer_gen:
       feed_dict[self._enc_batch_extend_vocab] = batch.enc_batch_extend_vocab
       feed_dict[self._max_art_oovs] = batch.max_art_oovs
@@ -89,10 +98,10 @@ class SummarizationModel(object):
     """
     with tf.variable_scope('encoder'):
       cell_fw = tf.contrib.rnn.LSTMCell(self._hps.hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
-      pdb.set_trace()
       cell_bw = tf.contrib.rnn.LSTMCell(self._hps.hidden_dim, initializer=self.rand_unif_init, state_is_tuple=True)
       (encoder_outputs, (fw_st, bw_st)) = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, encoder_inputs, dtype=tf.float32, sequence_length=seq_len, swap_memory=True)
       encoder_outputs = tf.concat(axis=2, values=encoder_outputs) # concatenate the forwards and backwards states
+      
     return encoder_outputs, fw_st, bw_st
 
 
@@ -202,7 +211,8 @@ class SummarizationModel(object):
     """Add the whole sequence-to-sequence model to the graph."""
     hps = self._hps
     vsize = self._vocab.size() # size of the vocabulary
-
+    #cuipi
+    #syn_size = len(self._syntax_tag)
     with tf.variable_scope('seq2seq'):
       # Some initializers
       self.rand_unif_init = tf.random_uniform_initializer(-hps.rand_unif_init_mag, hps.rand_unif_init_mag, seed=123)
@@ -211,12 +221,25 @@ class SummarizationModel(object):
       # Add embedding matrix (shared by the encoder and decoder inputs)
       with tf.variable_scope('embedding'):
         embedding = tf.get_variable('embedding', [vsize, hps.emb_dim], dtype=tf.float32, initializer=self.trunc_norm_init)
+        #embedding_syn = tf.get_variable('embedding_syn', [syn_size, hps.emb_dim], dtype=tf.float32, initializer=self.trunc_norm_init) #cuipi
+        #embedding_enc = tf.concat(axis=0,values=[embedding,embedding_syn]) #cuipi
+
         if hps.mode=="train": self._add_emb_vis(embedding) # add to tensorboard
         emb_enc_inputs = tf.nn.embedding_lookup(embedding, self._enc_batch) # tensor with shape (batch_size, max_enc_steps, emb_size)
+        #emb_enc_inputs = tf.nn.embedding_lookup(embedding_enc, self._enc_batch) #cuipi
         emb_dec_inputs = [tf.nn.embedding_lookup(embedding, x) for x in tf.unstack(self._dec_batch, axis=1)] # list length max_dec_steps containing shape (batch_size, emb_size)
 
       # Add the encoder.
       enc_outputs, fw_st, bw_st = self._add_encoder(emb_enc_inputs, self._enc_lens)
+      #pdb.set_trace()
+      #cuipi
+      #
+      # self.enc_nosyn_outputs = np.zeros((hps.batch_size, self._max_enc_seq_len, hps.emb_dim), dtype=np.float32)
+      
+      # for i in hps.batch_size:
+      #   enc_nosyn_seq_outputs = np.delete(enc_outputs[i],self._enc_batch_synLoc,axis=0)
+      #   enc_nosyn_outputs[i, : , : ] = enc_nosyn_seq_outputs[:,:]
+      #cuip
       self._enc_states = enc_outputs
 
       # Our encoder is bidirectional and our decoder is unidirectional so we need to reduce the final encoder hidden state to the right size to be the initial decoder hidden state
@@ -358,6 +381,7 @@ class SummarizationModel(object):
       dec_in_state: A LSTMStateTuple of shape ([1,hidden_dim],[1,hidden_dim])
     """
     feed_dict = self._make_feed_dict(batch, just_enc=True) # feed the batch into the placeholders
+    #sess == tf_debug.LocalCLIDebugWrapperSession(sess) #cuipi
     (enc_states, dec_in_state, global_step) = sess.run([self._enc_states, self._dec_in_state, self.global_step], feed_dict) # run the encoder
 
     # dec_in_state is LSTMStateTuple shape ([batch_size,hidden_dim],[batch_size,hidden_dim])

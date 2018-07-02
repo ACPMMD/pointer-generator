@@ -28,6 +28,7 @@ from model import SummarizationModel
 from decode import BeamSearchDecoder
 import util
 from tensorflow.python import debug as tf_debug
+
 import pdb
 
 FLAGS = tf.app.flags.FLAGS
@@ -110,6 +111,7 @@ def restore_best_model():
   sess = tf.Session(config=util.get_config())
   print "Initializing all variables..."
   sess.run(tf.initialize_all_variables())
+  #sess = tf_debug.LocalCLIDebugWrapperSession(sess) #cuipi
 
   # Restore the best model from eval dir
   saver = tf.train.Saver([v for v in tf.all_variables() if "Adagrad" not in v.name])
@@ -191,7 +193,6 @@ def run_training(model, batcher, sess_context_manager, sv, summary_writer):
       sess.add_tensor_filter("has_inf_or_nan", tf_debug.has_inf_or_nan)
     while True: # repeats until interrupted
       batch = batcher.next_batch()
-
       tf.logging.info('running training step...')
       t0=time.time()
       results = model.run_train_step(sess, batch)
@@ -222,6 +223,8 @@ def run_eval(model, batcher, vocab):
   model.build_graph() # build the graph
   saver = tf.train.Saver(max_to_keep=3) # we will keep 3 best checkpoints at a time
   sess = tf.Session(config=util.get_config())
+  #sess.run(tf.global_variables_initializer())          #cuipi
+  #sess = tf_debug.LocalCLIDebugWrapperSession(sess)    #cuipi 
   eval_dir = os.path.join(FLAGS.log_root, "eval") # make a subdir of the root dir for eval data
   bestmodel_save_path = os.path.join(eval_dir, 'bestmodel') # this is where checkpoints of best models are saved
   summary_writer = tf.summary.FileWriter(eval_dir)
@@ -298,9 +301,8 @@ def main(unused_argv):
   for key,val in FLAGS.__flags.iteritems(): # for each flag
     if key in hparam_list: # if it's in the list
       hps_dict[key] = val # add it to the dict
-  pdb.set_trace()
   hps = namedtuple("HParams", hps_dict.keys())(**hps_dict)
-  
+
   # Create a batcher object that will create minibatches of data
   batcher = Batcher(FLAGS.data_path, vocab, hps, single_pass=FLAGS.single_pass)
 

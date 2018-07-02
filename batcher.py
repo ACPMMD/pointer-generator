@@ -23,7 +23,7 @@ import time
 import numpy as np
 import tensorflow as tf
 import data
-
+import pdb
 
 class Example(object):
   """Class representing a train/val/test example for text summarization."""
@@ -49,6 +49,15 @@ class Example(object):
       article_words = article_words[:hps.max_enc_steps]
     self.enc_len = len(article_words) # store the length after truncation but before padding
     self.enc_input = [vocab.word2id(w) for w in article_words] # list of word ids; OOVs are represented by the id for UNK token
+
+    #cuipi Position the syntax tag
+    # self.syn_location = []
+    # for i in range(len(article_words)):
+    #   if(article_words[i] in data.SYNTAX_TAG):
+    #     self.syn_location.append(i)
+    # self.enc_syn_len = len(self.syn_location)
+    # self.enc_nosyn_len = self.enc_len - self.enc_syn_len
+    #cuipi
 
     # Process the abstract
     abstract = ' '.join(abstract_sentences) # string
@@ -116,6 +125,12 @@ class Example(object):
       while len(self.enc_input_extend_vocab) < max_len:
         self.enc_input_extend_vocab.append(pad_id)
 
+  #cuipi
+  def pad_syntax_location(self, max_len, pad_id):
+    """Pad the syntax location sequence with pad_id up to max_len"""
+    while len(self.syn_location) < max_len:
+      self.syn_location.append(-1)
+  #cuipi
 
 class Batch(object):
   """Class representing a minibatch of train/val/test examples for text summarization."""
@@ -153,22 +168,30 @@ class Batch(object):
     # Determine the maximum length of the encoder input sequence in this batch
     max_enc_seq_len = max([ex.enc_len for ex in example_list])
 
+    # Determine the maximum length of the encoder input but syntax sequence in this batch
+    #max_enc_seq_nosyn_len = max([ex.enc_nosyn_len for ex in example_list]) #cuipi
+    #max_enc_seq_syn_len = max([ex.enc_syn_len for ex in example_list])#cuipi
+
     # Pad the encoder input sequences up to the length of the longest sequence
     for ex in example_list:
       ex.pad_encoder_input(max_enc_seq_len, self.pad_id)
-
+      #ex.pad_syntax_location(max_enc_seq_syn_len, self.pad_id)  #cuipi
     # Initialize the numpy arrays
     # Note: our enc_batch can have different length (second dimension) for each batch because we use dynamic_rnn for the encoder.
     self.enc_batch = np.zeros((hps.batch_size, max_enc_seq_len), dtype=np.int32)
     self.enc_lens = np.zeros((hps.batch_size), dtype=np.int32)
+    #self.enc_syn_lens = np.zeros((hps.batch_size), dtype=np.int32) #cuipi
     self.enc_padding_mask = np.zeros((hps.batch_size, max_enc_seq_len), dtype=np.float32)
-
+    #self.enc_batch_synLoc = np.zeros((hps.batch_size, max_enc_seq_syn_len), dtype=np.int32) #cuipi
     # Fill in the numpy arrays
     for i, ex in enumerate(example_list):
       self.enc_batch[i, :] = ex.enc_input[:]
       self.enc_lens[i] = ex.enc_len
+      #self.enc_syn_lens[i] = ex.enc_syn_len  #cuipi
+      #self.enc_batch_synLoc[i, :] = ex.syn_location[:]  #cuipi
       for j in xrange(ex.enc_len):
-        self.enc_padding_mask[i][j] = 1
+        if ex.enc_input[j] not in data.SYNTAX_LIST: #cuipi
+          self.enc_padding_mask[i][j] = 1
 
     # For pointer-generator mode, need to store some extra info
     if hps.pointer_gen:
@@ -287,7 +310,7 @@ class Batcher(object):
 
   def fill_example_queue(self):
     """Reads data from file and processes into Examples which are then placed into the example queue."""
-
+    
     input_gen = self.text_generator(data.example_generator(self._data_path, self._single_pass))
 
     while True:
